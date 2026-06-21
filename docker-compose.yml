@@ -1,0 +1,37 @@
+services:
+  flowable:
+    image: flowable/flowable-rest:7.0.0
+    network_mode: bridge
+
+    ports:
+      - "8080:8080"
+
+    environment:
+      SPRING_DATASOURCE_URL: ${SUPABASE_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${SUPABASE_DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${SUPABASE_DB_PASSWORD}
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+
+      FLOWABLE_DATABASE_SCHEMA: flowable
+      FLOWABLE_DATABASE_SCHEMA_UPDATE: true
+
+      FLOWABLE_REST_APP_ADMIN_USER_ID: ${FLOWABLE_ADMIN_USER:-admin}
+      FLOWABLE_REST_APP_ADMIN_PASSWORD: ${FLOWABLE_ADMIN_PASSWORD:-admin}
+      FLOWABLE_REST_APP_ADMIN_EMAIL: ${FLOWABLE_ADMIN_EMAIL:-admin@example.com}
+
+    restart: unless-stopped
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "-f",
+          "-u",
+          "${FLOWABLE_ADMIN_USER:-admin}:${FLOWABLE_ADMIN_PASSWORD:-admin}",
+          "http://localhost:8080/flowable-rest/service/repository/deployments",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
