@@ -1,0 +1,24 @@
+# docker-compose.override.yml — tự động được docker compose đọc khi chạy local.
+# File này KHÔNG được dùng ở production (up.sh dùng docker compose up thường,
+# không merge file này).
+#
+# Để production KHÔNG dùng file này:
+#   docker compose -f docker-compose.yml up -d   (chỉ định file rõ ràng)
+
+services:
+  flowable:
+    # Tắt restart tự động khi dev để tránh container restart liên tục lúc debug
+    restart: "no"
+
+    # Mở thêm port debug JVM (JDWP) — attach từ IDE
+    ports:
+      - "8080:8080"
+      - "5005:5005"   # JVM remote debug
+
+    environment:
+      # Bật JVM remote debug (attach mode, suspend=n để app khởi động bình thường)
+      JAVA_TOOL_OPTIONS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
+
+      # Dev thường trỏ NestJS chạy trực tiếp trên host (không trong Docker)
+      # host.docker.internal cho phép container gọi ra host machine
+      NESTJS_INTERNAL_BASE_URL: "http://host.docker.internal:3000"

@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.2.0</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.company</groupId>
+    <artifactId>flowable-server</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+    <name>Flowable Custom Server</name>
+
+    <properties>
+        <java.version>17</java.version>
+        <flowable.version>7.0.0</flowable.version>
+    </properties>
+
+    <dependencies>
+        <!--
+            Flowable REST API — tự động cấu hình toàn bộ REST endpoints:
+            /runtime/process-instances, /runtime/tasks, /repository/*, /history/*, v.v.
+            Tương đương image flowable/flowable-rest nhưng cho phép thêm Spring Bean tuỳ chỉnh.
+        -->
+        <dependency>
+            <groupId>org.flowable</groupId>
+            <artifactId>flowable-spring-boot-starter-rest</artifactId>
+            <version>${flowable.version}</version>
+        </dependency>
+
+        <!--
+            spring-webflux + reactor-netty để có WebClient gọi ngược NestJS từ JavaDelegate.
+            Chỉ dùng spring-webflux (không dùng spring-boot-starter-webflux) để tránh
+            xung đột: Flowable REST dùng Spring MVC (servlet), còn WebClient chỉ cần
+            reactor runtime chứ không cần chuyển sang Netty HTTP server.
+        -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webflux</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.projectreactor.netty</groupId>
+            <artifactId>reactor-netty-http</artifactId>
+        </dependency>
+
+        <!-- PostgreSQL driver -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Lombok — chỉ compile-time, không đi vào JAR final -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

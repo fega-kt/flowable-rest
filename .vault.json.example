@@ -1,0 +1,8 @@
+{
+  "addr": "https://vault.zhizhu.online",
+  "kv": 2,
+  "envs": {
+    "dev":        "secret/flowable-server-dev",
+    "production": "secret/flowable-server-prod"
+  }
+}

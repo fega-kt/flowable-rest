@@ -1,0 +1,52 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 30000
+
+flowable:
+  # Tách schema Flowable khỏi schema business của NestJS (mục 7.1 docs)
+  database-schema: ${FLOWABLE_DATABASE_SCHEMA:flowable}
+  database-schema-update: ${FLOWABLE_DATABASE_SCHEMA_UPDATE:true}
+
+  # Bật full history để History REST API trả đủ dữ liệu tra cứu (mục 3.1 docs)
+  history-level: full
+
+  # Bật async executor cho Timer Boundary Event và External Worker Job
+  async-executor-activate: true
+
+  # Auto-deploy tất cả file *.bpmn20.xml trong thư mục processes/ khi khởi động
+  process:
+    definition-location-prefix: classpath*:/processes/
+    definition-location-suffixes: "**.bpmn20.xml,**.bpmn"
+
+  # Admin user cho Flowable REST API (tương ứng env vars trong docker-compose)
+  common:
+    app:
+      admin:
+        user-id: ${FLOWABLE_REST_APP_ADMIN_USER_ID:admin}
+        password: ${FLOWABLE_REST_APP_ADMIN_PASSWORD:admin}
+        email: ${FLOWABLE_REST_APP_ADMIN_EMAIL:admin@example.com}
+
+server:
+  port: 8080
+  # Giữ cùng context path với image gốc flowable/flowable-rest
+  # để NestJS không phải đổi FLOWABLE_REST_BASE_URL
+  servlet:
+    context-path: /flowable-rest/service
+
+# URL gốc của NestJS internal API — chỉ accessible trong mạng nội bộ
+nestjs:
+  internal:
+    base-url: ${NESTJS_INTERNAL_BASE_URL:http://nestjs-approval-svc:3000}
+
+logging:
+  level:
+    org.flowable: INFO
+    com.company.flowableserver: DEBUG
+  pattern:
+    console: "%d{HH:mm:ss} [%thread] %-5level %logger{36} — %msg%n"
