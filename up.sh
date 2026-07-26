@@ -48,13 +48,13 @@ else
     Userpass)
       read -rp  "? Username: "   USERNAME
       read -rsp "? Password: "   PASSWORD; echo
-      VAULT_TOKEN=$(curl -sf "${VAULT_ADDR}/v1/auth/userpass/login/${USERNAME}" \
+      VAULT_TOKEN=$(curl -sSf "${VAULT_ADDR}/v1/auth/userpass/login/${USERNAME}" \
         -d "{\"password\":\"${PASSWORD}\"}" | jq -r '.auth.client_token')
       ;;
     LDAP)
       read -rp  "? LDAP username: " USERNAME
       read -rsp "? LDAP password: " PASSWORD; echo
-      VAULT_TOKEN=$(curl -sf "${VAULT_ADDR}/v1/auth/ldap/login/${USERNAME}" \
+      VAULT_TOKEN=$(curl -sSf "${VAULT_ADDR}/v1/auth/ldap/login/${USERNAME}" \
         -d "{\"password\":\"${PASSWORD}\"}" | jq -r '.auth.client_token')
       ;;
   esac
@@ -70,8 +70,17 @@ else
   API_PATH="${SECRET_PATH}"
 fi
 
-RESPONSE=$(curl -sf "${VAULT_ADDR}/v1/${API_PATH}" \
+HTTP_RESPONSE=$(curl -sS -w '\n%{http_code}' "${VAULT_ADDR}/v1/${API_PATH}" \
   -H "X-Vault-Token: ${VAULT_TOKEN}")
+HTTP_CODE=$(echo "$HTTP_RESPONSE" | tail -n1)
+RESPONSE=$(echo "$HTTP_RESPONSE" | sed '$d')
+
+if [ "$HTTP_CODE" != "200" ]; then
+  echo "[up.sh] Vault trả về lỗi (HTTP $HTTP_CODE) khi đọc ${SECRET_PATH}:" >&2
+  echo "$RESPONSE" >&2
+  echo "[up.sh] Kiểm tra lại: token còn hạn/đúng quyền đọc path này không." >&2
+  exit 1
+fi
 
 if [ "$KV" -eq 2 ]; then
   DATA=$(echo "$RESPONSE" | jq -r '.data.data')
@@ -81,12 +90,30 @@ fi
 
 # ── write .env ────────────────────────────────────────────────────────────────
 
-echo "$DATA" | jq -r 'to_entries[] | "\(.key)=\(.value)"' > .env
+echo "$DATA" | jq -r 'to_entries[] | "\(.key)=\(.value)"' | tr -d '\r' > .env
 echo "✔ Secrets written to .env"
 
 if [ -n "${APP_IMAGE:-}" ]; then
   echo "APP_IMAGE=${APP_IMAGE}" >> .env
 fi
+
+# ── log các key đã ghi vào .env (che giá trị, không in secret ra terminal/CI log) ─
+
+mask_value() {
+  local v="$1" len
+  len=${#v}
+  if [ "$len" -le 4 ]; then
+    printf '****'
+  else
+    printf '%s%s%s' "${v:0:2}" "$(printf '%*s' $((len - 4)) '' | tr ' ' '*')" "${v: -2}"
+  fi
+}
+
+echo "▶ Các biến đã ghi vào .env (giá trị đã che bớt):"
+while IFS='=' read -r KEY VALUE; do
+  [ -n "$KEY" ] || continue
+  printf '    %s=%s\n' "$KEY" "$(mask_value "$VALUE")"
+done < .env
 
 # ── pull & deploy ─────────────────────────────────────────────────────────────
 
