@@ -127,7 +127,7 @@
     <!-- Manager APPROVE + số ngày <= 2 → finalize ngay -->
     <sequenceFlow id="sf08" sourceRef="gwManagerDecision" targetRef="finalizeApproval">
       <conditionExpression xsi:type="tFormalExpression">
-        ${decision == 'APPROVE' &amp;&amp; numberOfDays <= 2}
+        ${decision == 'APPROVE' &amp;&amp; numberOfDays &lt;= 2}
       </conditionExpression>
     </sequenceFlow>
 
