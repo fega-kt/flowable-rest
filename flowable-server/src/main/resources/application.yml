@@ -1,4 +1,7 @@
 spring:
+  output:
+    ansi:
+      enabled: always
   datasource:
     url: ${SPRING_DATASOURCE_URL}
     username: ${SPRING_DATASOURCE_USERNAME}
@@ -48,5 +51,6 @@ logging:
   level:
     org.flowable: INFO
     com.company.flowableserver: DEBUG
+    HTTP: INFO
   pattern:
-    console: "%d{HH:mm:ss} [%thread] %-5level %logger{36} — %msg%n"
+    console: "%clr(%d{HH:mm:ss}){faint} %clr([%thread]){magenta} %clr(%-5level) %clr(%logger{36}){cyan} %clr(-){faint} %msg%n"

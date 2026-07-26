@@ -19,7 +19,18 @@ zhizhu (Supabase DB)
 
 ## Bắt đầu
 
-### 1. Tạo schema flowable trong Supabase
+### 1. Cài đặt công cụ cần thiết
+
+| Công cụ | Dùng để | Windows (winget) | macOS (brew) |
+| ------- | ------- | ----------------- | ------------- |
+| Docker + Docker Compose | Chạy Flowable trong container | [Docker Desktop](https://www.docker.com/products/docker-desktop/) | `brew install --cask docker` |
+| `jq` | Parse JSON khi fetch secrets từ Vault (`dev.sh`/`up.sh`) | `winget install jqlang.jq` | `brew install jq` |
+| Maven 3.9+ *(chỉ cần nếu chạy `dev.sh --mvn`)* | Build/run bằng `mvn spring-boot:run`, hot reload không cần Docker | Không có package chính chủ trên winget — tải zip tại [maven.apache.org](https://maven.apache.org/download.cgi), giải nén rồi thêm `bin/` vào PATH | `brew install maven` |
+| JDK 17 *(chỉ cần nếu chạy `dev.sh --mvn`)* | `pom.xml` yêu cầu `java.version=17`; Lombok (pin theo Spring Boot 3.2 parent) chưa hỗ trợ JDK mới hơn (>17) nên annotation processor sẽ lỗi `cannot find symbol: variable log` nếu build bằng JDK khác | `winget install EclipseAdoptium.Temurin.17.JDK` | `brew install temurin@17` |
+
+Sau khi cài `jq`/Maven, mở **terminal mới** (hoặc `source ~/.bashrc`) để PATH được nhận.
+
+### 2. Tạo schema flowable trong Supabase
 
 Vào Supabase SQL Editor, chọn DB `zhizhu`, chạy:
 
@@ -27,7 +38,27 @@ Vào Supabase SQL Editor, chọn DB `zhizhu`, chạy:
 CREATE SCHEMA IF NOT EXISTS flowable;
 ```
 
-### 2. Cấu hình env
+### 3. Lấy secrets
+
+**Cách A — qua Vault (khuyên dùng):**
+
+```bash
+cp .vault.json.example .vault.json   # điền addr + path secret dev thật
+bash dev.sh          # docker compose pull + up (chạy trong container)
+bash dev.sh --mvn    # mvn spring-boot:run (hot reload, không cần Docker)
+```
+
+`dev.sh` tự fetch secrets từ Vault và `export` thẳng vào biến môi trường của process đang chạy — **không ghi ra file `.env`** trên đĩa để tránh lộ secret. Sau khi load xong, script in ra danh sách key đã nhận với giá trị bị che bớt để tiện kiểm tra, ví dụ:
+
+```text
+▶ Các biến đã load (giá trị đã che bớt):
+    SUPABASE_DB_HOST=aw************************om
+    SUPABASE_DB_USER=po*******************pw
+    SUPABASE_DB_PASSWORD=55****************00
+    INTERNAL_SERVICE_TOKEN=bY*******VM
+```
+
+**Cách B — `.env` thủ công (không cần Vault):**
 
 ```bash
 cp .env.example .env
@@ -44,9 +75,7 @@ cp .env.example .env
 | `FLOWABLE_ADMIN_PASSWORD` | Password mạnh — NestJS dùng để gọi Flowable REST API |
 | `FLOWABLE_ADMIN_EMAIL` | Email admin Flowable |
 
-### 3. Chạy Flowable
-
-Image được build & push lên GHCR qua CI (xem [Deploy qua GitHub Actions](#deploy-qua-github-actions)), `docker-compose.yml` không tự build tại chỗ nữa — cần login GHCR trước rồi pull:
+Rồi chạy trực tiếp bằng Docker Compose (image được build & push lên GHCR qua CI — xem [Deploy qua GitHub Actions](#deploy-qua-github-actions) — `docker-compose.yml` không tự build tại chỗ nữa nên cần login GHCR trước rồi pull):
 
 ```bash
 docker login ghcr.io -u <github-username>   # dùng PAT có quyền read:packages
@@ -54,12 +83,7 @@ docker compose pull
 docker compose up
 ```
 
-Cách khác — dùng `dev.sh` (tự fetch secrets từ Vault rồi ghi `.env`):
-
-```bash
-bash dev.sh          # docker compose pull + up (chạy trong container)
-bash dev.sh --mvn    # mvn spring-boot:run (hot reload, không cần Docker)
-```
+### 4. Kiểm tra
 
 Chờ log xuất hiện:
 
@@ -67,12 +91,10 @@ Chờ log xuất hiện:
 Started FlowableRestApplication in ... seconds
 ```
 
-Container có healthcheck tự động gọi `/flowable-rest/service/repository/deployments` mỗi 30 giây (timeout 10s, tối đa 5 lần retry, chờ 60s khởi động).
-
-### 4. Kiểm tra
+Container có healthcheck tự động gọi `/flowable-rest/service/process-api/repository/deployments` mỗi 30 giây (timeout 10s, tối đa 5 lần retry, chờ 60s khởi động).
 
 ```bash
-curl -u admin:your-password http://localhost:8080/flowable-rest/service/repository/deployments
+curl -u admin:your-password http://localhost:8080/flowable-rest/service/process-api/repository/deployments
 ```
 
 Kết quả mong đợi:
@@ -82,6 +104,8 @@ Kết quả mong đợi:
 ```
 
 ## Flowable REST API endpoints hay dùng
+
+Base URL: `http://localhost:8080/flowable-rest/service/process-api` (dùng `flowable-spring-boot-starter-rest` autoconfigure — khác image gốc `flowable/flowable-rest`, mọi endpoint process engine nằm dưới servlet path `/process-api`).
 
 | Method | Endpoint                              | Mô tả                    |
 | ------ | ------------------------------------- | ------------------------ |

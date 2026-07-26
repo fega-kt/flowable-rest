@@ -40,7 +40,7 @@ services:
           "-f",
           "-u",
           "${FLOWABLE_ADMIN_USER:-admin}:${FLOWABLE_ADMIN_PASSWORD:-admin}",
-          "http://localhost:8080/flowable-rest/service/repository/deployments",
+          "http://localhost:8080/flowable-rest/service/process-api/repository/deployments",
         ]
       interval: 30s
       timeout: 10s
