@@ -46,8 +46,19 @@ cp .env.example .env
 
 ### 3. Chạy Flowable
 
+Image được build & push lên GHCR qua CI (xem [Deploy qua GitHub Actions](#deploy-qua-github-actions)), `docker-compose.yml` không tự build tại chỗ nữa — cần login GHCR trước rồi pull:
+
 ```bash
-docker-compose up
+docker login ghcr.io -u <github-username>   # dùng PAT có quyền read:packages
+docker compose pull
+docker compose up
+```
+
+Cách khác — dùng `dev.sh` (tự fetch secrets từ Vault rồi ghi `.env`):
+
+```bash
+bash dev.sh          # docker compose pull + up (chạy trong container)
+bash dev.sh --mvn    # mvn spring-boot:run (hot reload, không cần Docker)
 ```
 
 Chờ log xuất hiện:
@@ -80,3 +91,29 @@ Kết quả mong đợi:
 | GET    | `/runtime/tasks`                      | Lấy danh sách task       |
 | POST   | `/runtime/tasks/:id`                  | Complete / claim task    |
 | GET    | `/history/historic-process-instances` | Lịch sử process          |
+
+## Deploy qua GitHub Actions
+
+Workflow `.github/workflows/deploy.yml` chạy khi push vào `main` (hoặc trigger thủ công `workflow_dispatch`):
+
+1. **Build & Push** — build image từ `flowable-server/Dockerfile`, push lên `ghcr.io/<owner>/<repo>-flowable-server` (tag `latest` + `sha-<commit>`)
+2. **Deploy** — SSH vào server qua Cloudflare Access tunnel, chạy `up.sh` non-interactive để pull image mới và `docker compose up -d`
+
+### Secrets cần thêm ở GitHub (Settings → Secrets and variables → Actions)
+
+| Secret | Mô tả |
+| ------ | ----- |
+| `SERVER_SSH_KEY` | Private key SSH để đăng nhập server |
+| `SERVER_HOST` | Hostname server (qua Cloudflare Access tunnel) |
+| `SERVER_USER` | User SSH trên server |
+| `SERVER_DEPLOY_PATH` | Đường dẫn thư mục chứa repo này trên server |
+| `CF_ACCESS_CLIENT_ID` | Cloudflare Access service token — client ID |
+| `CF_ACCESS_CLIENT_SECRET` | Cloudflare Access service token — client secret |
+| `GHCR_PAT` | Personal Access Token quyền `read:packages`, để server login pull image từ GHCR |
+| `VAULT_ADDR` | Địa chỉ Vault, ví dụ `https://vault.zhizhu.online` |
+| `VAULT_TOKEN` | Vault token (nên tạo token riêng cho CI, policy read-only vào path production) |
+| `VAULT_SECRET_PATH` | Path chứa secrets production trong Vault, ví dụ `secret/flowable-server-prod` |
+
+`GITHUB_TOKEN` (build & push lên GHCR) đã có sẵn tự động, không cần tạo thêm.
+
+Lưu ý: GHCR package mặc định **private** — máy dev chạy `docker compose pull` cũng cần `docker login ghcr.io` bằng token có quyền `read:packages`, hoặc chuyển package sang public trong GitHub → Packages settings sau lần build đầu tiên.

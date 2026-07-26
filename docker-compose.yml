@@ -1,23 +1,34 @@
 services:
   flowable:
-    image: flowable/flowable-rest:7.0.0
-    network_mode: bridge
+    # Luôn dùng image đã build & push lên GHCR (CI build từ flowable-server/Dockerfile).
+    # Mặc định là tag :latest production; override qua APP_IMAGE để deploy bản sha cụ thể.
+    image: ${APP_IMAGE:-ghcr.io/fega-kt/flowable-rest-flowable-server:latest}
 
     ports:
       - "8080:8080"
 
     environment:
+      # --- Database (Supabase PostgreSQL) ---
       SPRING_DATASOURCE_URL: ${SUPABASE_DB_URL}
       SPRING_DATASOURCE_USERNAME: ${SUPABASE_DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${SUPABASE_DB_PASSWORD}
-      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
 
+      # --- Flowable schema/config ---
       FLOWABLE_DATABASE_SCHEMA: flowable
-      FLOWABLE_DATABASE_SCHEMA_UPDATE: true
+      FLOWABLE_DATABASE_SCHEMA_UPDATE: "true"
 
+      # --- Admin user cho Flowable REST API ---
       FLOWABLE_REST_APP_ADMIN_USER_ID: ${FLOWABLE_ADMIN_USER:-admin}
       FLOWABLE_REST_APP_ADMIN_PASSWORD: ${FLOWABLE_ADMIN_PASSWORD:-admin}
       FLOWABLE_REST_APP_ADMIN_EMAIL: ${FLOWABLE_ADMIN_EMAIL:-admin@example.com}
+
+      # --- Callback NestJS (JavaDelegate/TaskListener gọi ngược) ---
+      # Trong Docker Compose: "nestjs" là tên service NestJS trong cùng compose file.
+      # Trong K8s: dùng ClusterIP service name, ví dụ: http://nestjs-approval-svc:3000
+      NESTJS_INTERNAL_BASE_URL: ${NESTJS_INTERNAL_BASE_URL:-http://nestjs:3000}
+
+      # --- Shared secret giữa Flowable và NestJS (dùng trong X-Internal-Auth header) ---
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
 
     restart: unless-stopped
 
@@ -34,4 +45,4 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 60s
+      start_period: 90s

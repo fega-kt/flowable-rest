@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:flowable="http://flowable.org/bpmn"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             typeLanguage="http://www.w3.org/2001/XMLSchema"
+             expressionLanguage="http://www.w3.org/1999/XPath"
+             targetNamespace="http://approval.company.com">
+
+  <process id="leaveRequestProcess" name="Leave Request Approval" isExecutable="true">
+
+    <!-- ============================================================
+         START
+         NestJS truyền vào variables khi start:
+           employeeId, numberOfDays, managerId, hrGroup
+         ============================================================ -->
+    <startEvent id="start" name="Start"/>
+
+    <!-- ============================================================
+         STEP 1: Validate số ngày phép còn lại (optional safeguard).
+         NestJS đã validate trước khi start — delegate này là lớp bảo vệ thứ hai.
+         Gọi GET /internal/hrm/{employeeId}/remaining-leave-days
+         Ném BpmnError("INSUFFICIENT_LEAVE_BALANCE") nếu không đủ.
+         flowable:async="true": tách khỏi transaction start để tránh giữ DB lock.
+         ============================================================ -->
+    <serviceTask id="calculateLeave"
+                 name="Validate Leave Balance"
+                 flowable:delegateExpression="${calculateLeaveDelegate}"
+                 flowable:async="true"/>
+
+    <!-- Xử lý lỗi không đủ ngày phép: ghi log rồi kết thúc process -->
+    <boundaryEvent id="onInsufficientBalance" attachedToRef="calculateLeave">
+      <errorEventDefinition errorRef="errInsufficientBalance"/>
+    </boundaryEvent>
+
+    <endEvent id="endInsufficientBalance" name="End — Insufficient Balance"/>
+
+    <!-- ============================================================
+         STEP 2: Chờ Line Manager phê duyệt.
+         TaskListener "create" gán assignee động bằng cách gọi NestJS
+         (GET /internal/org-chart/{employeeId}/manager).
+         Nếu managerId đã được NestJS tính toán và truyền vào variable
+         khi start process, có thể bỏ TaskListener và dùng
+           flowable:assignee="${managerId}"
+         trực tiếp. TaskListener ở đây là cách linh hoạt hơn.
+         ============================================================ -->
+    <userTask id="lineManagerApproval" name="Line Manager Approval">
+      <extensionElements>
+        <flowable:taskListener event="create"
+                               delegateExpression="${assignManagerListener}"/>
+      </extensionElements>
+    </userTask>
+
+    <!-- Timer 24h (non-interrupting): gửi thông báo leo thang nhưng task vẫn còn active -->
+    <boundaryEvent id="managerTimeout"
+                   attachedToRef="lineManagerApproval"
+                   cancelActivity="false">
+      <timerEventDefinition>
+        <timeDuration>PT24H</timeDuration>
+      </timerEventDefinition>
+    </boundaryEvent>
+
+    <!-- STEP 2a: Thông báo leo thang — gọi POST /internal/workflow/escalate -->
+    <serviceTask id="escalateNotify"
+                 name="Notify Escalation"
+                 flowable:delegateExpression="${escalationDelegate}"
+                 flowable:async="true"/>
+
+    <!-- ============================================================
+         GATEWAY: quyết định sau khi Manager complete task.
+         Biến "decision" được NestJS set khi gọi complete task:
+           POST /runtime/tasks/{taskId}  body: { action: "complete", variables: [{ name: "decision", value: "APPROVE"|"REJECT" }] }
+         ============================================================ -->
+    <exclusiveGateway id="gwManagerDecision" name="Manager Decision"/>
+
+    <!-- ============================================================
+         STEP 3: HR Approval — chỉ khi Manager approve VÀ số ngày > 2.
+         candidateGroups lấy từ biến hrGroup được truyền lúc start process.
+         ============================================================ -->
+    <userTask id="hrApproval"
+              name="HR Approval"
+              flowable:candidateGroups="${hrGroup}"/>
+
+    <!-- GATEWAY: quyết định sau khi HR complete task -->
+    <exclusiveGateway id="gwHrDecision" name="HR Decision"/>
+
+    <!-- ============================================================
+         STEP 4: Finalize — gọi POST /internal/workflow/leave/finalize.
+         flowable:async="true" bắt buộc để tránh giữ transaction.
+         ============================================================ -->
+    <serviceTask id="finalizeApproval"
+                 name="Finalize Approval"
+                 flowable:delegateExpression="${finalizeApprovalDelegate}"
+                 flowable:async="true"/>
+
+    <!-- END EVENTS -->
+    <endEvent id="endApproved" name="End — Approved"/>
+    <endEvent id="endRejected" name="End — Rejected"/>
+
+    <!-- ERROR definitions -->
+    <error id="errInsufficientBalance" errorCode="INSUFFICIENT_LEAVE_BALANCE"/>
+
+    <!-- ============================================================
+         SEQUENCE FLOWS
+         ============================================================ -->
+
+    <!-- Start → calculateLeave → lineManagerApproval -->
+    <sequenceFlow id="sf01" sourceRef="start" targetRef="calculateLeave"/>
+    <sequenceFlow id="sf02" sourceRef="calculateLeave" targetRef="lineManagerApproval"/>
+
+    <!-- Lỗi không đủ ngày phép → kết thúc ngay -->
+    <sequenceFlow id="sf03" sourceRef="onInsufficientBalance" targetRef="endInsufficientBalance"/>
+
+    <!-- Timer hết hạn → notify → quay lại task (tạo task mới cho manager cấp trên nếu cần) -->
+    <sequenceFlow id="sf04" sourceRef="managerTimeout" targetRef="escalateNotify"/>
+    <sequenceFlow id="sf05" sourceRef="escalateNotify" targetRef="lineManagerApproval"/>
+
+    <!-- Manager complete → gateway -->
+    <sequenceFlow id="sf06" sourceRef="lineManagerApproval" targetRef="gwManagerDecision"/>
+
+    <!-- Manager APPROVE + số ngày > 2 → cần HR duyệt tiếp -->
+    <sequenceFlow id="sf07" sourceRef="gwManagerDecision" targetRef="hrApproval">
+      <conditionExpression xsi:type="tFormalExpression">
+        ${decision == 'APPROVE' &amp;&amp; numberOfDays > 2}
+      </conditionExpression>
+    </sequenceFlow>
+
+    <!-- Manager APPROVE + số ngày <= 2 → finalize ngay -->
+    <sequenceFlow id="sf08" sourceRef="gwManagerDecision" targetRef="finalizeApproval">
+      <conditionExpression xsi:type="tFormalExpression">
+        ${decision == 'APPROVE' &amp;&amp; numberOfDays <= 2}
+      </conditionExpression>
+    </sequenceFlow>
+
+    <!-- Manager REJECT → kết thúc từ chối -->
+    <sequenceFlow id="sf09" sourceRef="gwManagerDecision" targetRef="endRejected">
+      <conditionExpression xsi:type="tFormalExpression">
+        ${decision == 'REJECT'}
+      </conditionExpression>
+    </sequenceFlow>
+
+    <!-- HR complete → gateway -->
+    <sequenceFlow id="sf10" sourceRef="hrApproval" targetRef="gwHrDecision"/>
+
+    <!-- HR APPROVE → finalize -->
+    <sequenceFlow id="sf11" sourceRef="gwHrDecision" targetRef="finalizeApproval">
+      <conditionExpression xsi:type="tFormalExpression">
+        ${decision == 'APPROVE'}
+      </conditionExpression>
+    </sequenceFlow>
+
+    <!-- HR REJECT → kết thúc từ chối -->
+    <sequenceFlow id="sf12" sourceRef="gwHrDecision" targetRef="endRejected">
+      <conditionExpression xsi:type="tFormalExpression">
+        ${decision == 'REJECT'}
+      </conditionExpression>
+    </sequenceFlow>
+
+    <!-- Finalize xong → kết thúc được duyệt -->
+    <sequenceFlow id="sf13" sourceRef="finalizeApproval" targetRef="endApproved"/>
+
+  </process>
+</definitions>

@@ -1,7 +1,8 @@
-# Environment
+# Environment & secrets — không commit, lấy từ Vault qua up.sh
 .env
 .env.local
 .env.*.local
+.vault.json
 
 # Docker volumes & data
 data/
@@ -25,3 +26,9 @@ Thumbs.db
 node_modules/
 dist/
 build/
+
+# Java build output
+flowable-server/target/
+flowable-server/.mvn/repository/
+*.jar
+*.class
