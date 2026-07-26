@@ -99,9 +99,6 @@
     <endEvent id="endApproved" name="End — Approved"/>
     <endEvent id="endRejected" name="End — Rejected"/>
 
-    <!-- ERROR definitions -->
-    <error id="errInsufficientBalance" errorCode="INSUFFICIENT_LEAVE_BALANCE"/>
-
     <!-- ============================================================
          SEQUENCE FLOWS
          ============================================================ -->
@@ -162,4 +159,8 @@
     <sequenceFlow id="sf13" sourceRef="finalizeApproval" targetRef="endApproved"/>
 
   </process>
+
+  <!-- ERROR definitions — phải khai báo ở cấp definitions, không lồng trong process -->
+  <error id="errInsufficientBalance" errorCode="INSUFFICIENT_LEAVE_BALANCE"/>
+
 </definitions>
