@@ -1,11 +1,8 @@
 services:
   flowable:
-    # Build từ Dockerfile trong flowable-server/ thay vì dùng image đóng hộp.
-    # Điều này cho phép thêm JavaDelegate/TaskListener Spring Bean tuỳ chỉnh.
-    build:
-      context: ./flowable-server
-      dockerfile: Dockerfile
-    # image: flowable/flowable-rest:7.0.0  # giữ lại để fallback nếu cần
+    # Luôn dùng image đã build & push lên GHCR (CI build từ flowable-server/Dockerfile).
+    # Mặc định là tag :latest production; override qua APP_IMAGE để deploy bản sha cụ thể.
+    image: ${APP_IMAGE:-ghcr.io/fega-kt/flowable-rest-flowable-server:latest}
 
     ports:
       - "8080:8080"

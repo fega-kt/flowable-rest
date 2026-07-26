@@ -90,7 +90,7 @@ if [ "$MODE" = "mvn" ]; then
   cd flowable-server
   mvn spring-boot:run
 else
-  echo "▶ docker compose build + up ..."
-  docker compose build
+  echo "▶ docker compose pull + up (dùng image production từ GHCR) ..."
+  docker compose pull
   docker compose up
 fi
